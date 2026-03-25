@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>一键记车位</title>
+  <style>
+    :root {
+      --bg: #f6f7fb;
+      --card: #ffffff;
+      --text: #111827;
+      --muted: #6b7280;
+      --border: #e5e7eb;
+      --shadow: 0 10px 30px rgba(0,0,0,0.08);
+      --radius: 18px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      background: linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 18px;
+    }
+    .wrap {
+      max-width: 760px;
+      margin: 0 auto;
+    }
+    .title {
+      font-size: 30px;
+      font-weight: 800;
+      margin: 8px 0 6px;
+    }
+    .subtitle {
+      color: var(--muted);
+      margin-bottom: 18px;
+      line-height: 1.6;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 18px;
+      margin-bottom: 16px;
+    }
+    .grid {
+      display: grid;
+      gap: 12px;
+    }
+    @media (min-width: 720px) {
+      .grid-2 { grid-template-columns: 1fr 1fr; }
+    }
+    button, .link-btn {
+      width: 100%;
+      border: none;
+      border-radius: 14px;
+      padding: 14px 16px;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      background: #111827;
+      color: white;
+      transition: transform .08s ease, opacity .2s ease;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    button:active, .link-btn:active { transform: scale(0.99); }
+    button.secondary, .link-btn.secondary {
+      background: #eef2ff;
+      color: #312e81;
+      border: 1px solid #c7d2fe;
+    }
+    button.danger {
+      background: #fee2e2;
+      color: #991b1b;
+      border: 1px solid #fecaca;
+    }
+    label {
+      display: block;
+      font-weight: 700;
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+    textarea, input {
+      width: 100%;
+      padding: 12px 13px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      font-size: 15px;
+      outline: none;
+      background: #fff;
+    }
+    textarea { min-height: 82px; resize: vertical; }
+    .row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .pill {
+      display: inline-block;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: #f3f4f6;
+      color: #374151;
+      font-size: 13px;
+      margin-right: 8px;
+      margin-bottom: 8px;
+    }
+    .muted { color: var(--muted); }
+    .status {
+      padding: 12px 14px;
+      border-radius: 12px;
+      background: #f9fafb;
+      border: 1px solid var(--border);
+      line-height: 1.6;
+      white-space: pre-wrap;
+    }
+    .empty {
+      text-align: center;
+      color: var(--muted);
+      padding: 24px 12px;
+      border: 1px dashed var(--border);
+      border-radius: 14px;
+      background: #fafafa;
+    }
+    .kv {
+      display: grid;
+      grid-template-columns: 100px 1fr;
+      gap: 10px;
+      margin: 8px 0;
+      align-items: start;
+    }
+    .kv .k { color: var(--muted); }
+    .small { font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="title">一键记车位</div>
+    <div class="subtitle">停车时点一下“记录当前位置”，系统会保存你的经纬度、时间和备注。忘记停哪时，打开页面就能查看并一键导航。</div>
+
+    <div class="card grid grid-2">
+      <button id="saveBtn">记录当前位置</button>
+      <button id="refreshBtn" class="secondary">刷新当前定位</button>
+    </div>
+
+    <div class="card">
+      <label for="note">停车备注（可选）</label>
+      <textarea id="note" placeholder="例如：B2东门旁 / 充电桩旁 / 路边第3个车位"></textarea>
+      <div class="small muted" style="margin-top:8px;">建议在地库或高楼附近加一句备注，GPS 可能会有偏差。</div>
+    </div>
+
+    <div class="card">
+      <div class="row" style="margin-bottom: 10px;">
+        <span class="pill">只保存最近一次</span>
+        <span class="pill">本地存储</span>
+        <span class="pill">无需登录</span>
+      </div>
+      <div id="status" class="status">准备就绪。</div>
+    </div>
+
+    <div class="card">
+      <div style="font-size:20px;font-weight:800;margin-bottom:12px;">上一次停车位置</div>
+      <div id="record"></div>
+    </div>
+  </div>
+
+  <script>
+    const STORAGE_KEY = 'lastParkingLocation';
+    const saveBtn = document.getElementById('saveBtn');
+    const refreshBtn = document.getElementById('refreshBtn');
+    const noteEl = document.getElementById('note');
+    const statusEl = document.getElementById('status');
+    const recordEl = document.getElementById('record');
+
+    function setStatus(msg) {
+      statusEl.textContent = msg;
+    }
+
+    function formatTime(iso) {
+      try {
+        const d = new Date(iso);
+        return d.toLocaleString('zh-CN', { hour12: false });
+      } catch {
+        return iso || '-';
+      }
+    }
+
+    function mapLink(lat, lng) {
+      return `https://maps.google.com/?q=${lat},${lng}`;
+    }
+
+    function navLink(lat, lng) {
+      return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+    }
+
+    function renderRecord() {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) {
+        recordEl.innerHTML = '<div class="empty">还没有保存过停车位置。</div>';
+        return;
+      }
+      try {
+        const data = JSON.parse(raw);
+        recordEl.innerHTML = `
+          <div class="kv"><div class="k">保存时间</div><div>${formatTime(data.time)}</div></div>
+          <div class="kv"><div class="k">纬度</div><div>${data.lat}</div></div>
+          <div class="kv"><div class="k">经度</div><div>${data.lng}</div></div>
+          <div class="kv"><div class="k">定位精度</div><div>${data.accuracy ? Math.round(data.accuracy) + ' 米' : '-'}</div></div>
+          <div class="kv"><div class="k">备注</div><div>${data.note ? escapeHtml(data.note).replace(/\n/g,'<br>') : '<span class="muted">无</span>'}</div></div>
+          <div class="grid grid-2" style="margin-top:14px;">
+            <a class="link-btn" href="${mapLink(data.lat, data.lng)}" target="_blank" rel="noopener">在地图中查看</a>
+            <a class="link-btn secondary" href="${navLink(data.lat, data.lng)}" target="_blank" rel="noopener">导航去这里</a>
+          </div>
+          <div style="margin-top:10px;"><button id="clearBtn" class="danger">清除本次记录</button></div>
+        `;
+        const clearBtn = document.getElementById('clearBtn');
+        clearBtn?.addEventListener('click', () => {
+          localStorage.removeItem(STORAGE_KEY);
+          setStatus('已清除上一次停车记录。');
+          renderRecord();
+        });
+      } catch (e) {
+        recordEl.innerHTML = '<div class="empty">记录损坏，请清除后重新保存。</div>';
+      }
+    }
+
+    function escapeHtml(str) {
+      return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function getLocationAndSave() {
+      if (!navigator.geolocation) {
+        setStatus('当前设备不支持定位。请换浏览器打开，或检查浏览器权限。');
+        return;
+      }
+
+      setStatus('正在获取当前位置，请稍等…');
+      saveBtn.disabled = true;
+      refreshBtn.disabled = true;
+
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const data = {
+            lat: Number(pos.coords.latitude.toFixed(6)),
+            lng: Number(pos.coords.longitude.toFixed(6)),
+            accuracy: pos.coords.accuracy,
+            time: new Date().toISOString(),
+            note: noteEl.value.trim()
+          };
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+          setStatus(`已记录停车位置。\n时间：${formatTime(data.time)}\n精度：约 ${Math.round(data.accuracy)} 米`);
+          renderRecord();
+          saveBtn.disabled = false;
+          refreshBtn.disabled = false;
+        },
+        (err) => {
+          const messageMap = {
+            1: '定位权限被拒绝。请在浏览器设置里允许访问位置信息。',
+            2: '暂时无法获取定位，可能是信号较弱。建议到窗边或室外再试。',
+            3: '定位超时。建议重试，或切换网络后再试。'
+          };
+          setStatus(messageMap[err.code] || `定位失败：${err.message}`);
+          saveBtn.disabled = false;
+          refreshBtn.disabled = false;
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 12000,
+          maximumAge: 0
+        }
+      );
+    }
+
+    saveBtn.addEventListener('click', getLocationAndSave);
+    refreshBtn.addEventListener('click', getLocationAndSave);
+    renderRecord();
+  </script>
+</body>
+</html>
